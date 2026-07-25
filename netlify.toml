@@ -1,0 +1,15 @@
+[build]
+  functions = "netlify/functions"
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex"
+
+# Runs hourly, every hour on the hour (UTC — same time in every timezone,
+# so no BST/GMT drift to worry about, unlike the old 3x/day schedule).
+# isQuietHours() inside emma-notify.js still gates 23:00-07:00 London
+# regardless of how often this fires, so overnight runs no-op harmlessly.
+[functions."emma-notify"]
+  schedule = "0 * * * *"
