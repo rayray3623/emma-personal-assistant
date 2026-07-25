@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Emma</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F6F3;
+    --ink:#1C1C1A;
+    --graphite:#6B6B66;
+    --line:#D9D7D1;
+    --accent:#7C8B99;
+    --paper-raised:#FCFBF9;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing:antialiased;
+    position:relative;
+    overflow-x:hidden;
+  }
+
+  /* Agnes Martin grid — faint, hand-tuned imperfection */
+  .grid-field{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      repeating-linear-gradient(0deg, var(--line) 0px, var(--line) 1px, transparent 1px, transparent 48px),
+      repeating-linear-gradient(90deg, var(--line) 0px, var(--line) 1px, transparent 1px, transparent 48px);
+    opacity:0.35;
+    mask-image:radial-gradient(ellipse 80% 60% at 50% 20%, black 40%, transparent 90%);
+  }
+
+  .frame{
+    position:relative; z-index:1;
+    min-height:100vh;
+    display:flex; flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+
+  /* ---------- Gate ---------- */
+  .gate{
+    width:100%; max-width:360px;
+    text-align:center;
+  }
+  .mark{
+    font-family:'Fraunces', serif;
+    font-weight:300;
+    font-size:15px;
+    letter-spacing:0.32em;
+    text-transform:uppercase;
+    color:var(--graphite);
+    margin-bottom:44px;
+  }
+  .gate h1{
+    font-family:'Fraunces', serif;
+    font-weight:400;
+    font-size:42px;
+    line-height:1.15;
+    margin:0 0 10px;
+    letter-spacing:-0.01em;
+  }
+  .gate p.sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--graphite);
+    letter-spacing:0.04em;
+    margin:0 0 40px;
+  }
+  .gate-form{
+    display:flex; flex-direction:column; gap:14px;
+  }
+  input[type="password"]{
+    width:100%;
+    padding:14px 16px;
+    border:1px solid var(--line);
+    background:var(--paper-raised);
+    border-radius:2px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:14px;
+    color:var(--ink);
+    outline:none;
+    transition:border-color 0.2s ease;
+    text-align:center;
+    letter-spacing:0.08em;
+  }
+  input[type="password"]:focus{ border-color:var(--accent); }
+  input[type="password"]:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  .btn{
+    padding:14px 16px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    border-radius:2px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:0.12em;
+    text-transform:uppercase;
+    cursor:pointer;
+    transition:all 0.2s ease;
+  }
+  .btn:hover{ background:transparent; color:var(--ink); }
+  .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .btn:disabled{ opacity:0.4; cursor:default; }
+
+  .gate-error{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:#A65D4E;
+    letter-spacing:0.03em;
+    min-height:16px;
+    margin-top:2px;
+  }
+
+  /* ---------- Chat ---------- */
+  .app{
+    display:none;
+    width:100%; max-width:640px;
+    height:100vh;
+    flex-direction:column;
+    padding:32px 0 24px;
+  }
+  .app.active{ display:flex; }
+  .frame:has(.app.active){ justify-content:flex-start; padding-top:0; }
+
+  .app-header{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    padding:0 4px 20px;
+    border-bottom:1px solid var(--line);
+    margin-bottom:8px;
+  }
+  .app-header .mark{ margin:0; font-size:13px; }
+  .app-header .status{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    color:var(--graphite);
+    letter-spacing:0.06em;
+    display:flex; align-items:center; gap:6px;
+  }
+  .dot{ width:5px; height:5px; border-radius:50%; background:var(--accent); }
+
+  .thread{
+    flex:1;
+    overflow-y:auto;
+    padding:20px 4px;
+    display:flex;
+    flex-direction:column;
+    gap:22px;
+    scrollbar-width:thin;
+  }
+  .msg{ max-width:88%; }
+  .msg.from-emma{ align-self:flex-start; }
+  .msg.from-ray{ align-self:flex-end; }
+  .msg .who{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--graphite);
+    margin-bottom:6px;
+  }
+  .msg.from-ray .who{ text-align:right; }
+  .msg .bubble{
+    font-size:15px;
+    line-height:1.6;
+    white-space:pre-wrap;
+  }
+  .msg.from-ray .bubble{
+    text-align:right;
+    color:var(--graphite);
+  }
+  .msg.from-emma .bubble{ color:var(--ink); }
+
+  .thinking{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--graphite);
+    letter-spacing:0.04em;
+  }
+  .thinking .dots span{ animation: blink 1.4s infinite; opacity:0; }
+  .thinking .dots span:nth-child(2){ animation-delay:0.2s; }
+  .thinking .dots span:nth-child(3){ animation-delay:0.4s; }
+  @keyframes blink{ 0%,100%{opacity:0;} 50%{opacity:1;} }
+
+  .composer{
+    display:flex;
+    gap:10px;
+    padding-top:18px;
+    border-top:1px solid var(--line);
+  }
+  textarea{
+    flex:1;
+    resize:none;
+    border:1px solid var(--line);
+    background:var(--paper-raised);
+    border-radius:2px;
+    padding:12px 14px;
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:14px;
+    color:var(--ink);
+    outline:none;
+    min-height:46px;
+    max-height:140px;
+    line-height:1.5;
+  }
+  textarea:focus{ border-color:var(--accent); }
+  .send{
+    padding:0 20px;
+    border:1px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    border-radius:2px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    cursor:pointer;
+  }
+  .send:hover{ background:transparent; color:var(--ink); }
+  .send:disabled{ opacity:0.35; cursor:default; }
+
+  ::selection{ background:var(--accent); color:var(--paper); }
+
+  @media (prefers-reduced-motion: reduce){
+    .thinking .dots span{ animation:none; opacity:1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-field"></div>
+
+<div class="frame">
+
+  <!-- Gate -->
+  <div class="gate" id="gate">
+    <div class="mark">Monvoy &mdash; Private</div>
+    <h1>Emma</h1>
+    <p class="sub">this line is not for customers.</p>
+    <form class="gate-form" id="gateForm" autocomplete="off">
+      <input type="password" id="pw" placeholder="PASSWORD" required autofocus>
+      <button type="submit" class="btn" id="gateBtn">Enter</button>
+      <div class="gate-error" id="gateError"></div>
+    </form>
+  </div>
+
+  <!-- App -->
+  <div class="app" id="app">
+    <div class="app-header">
+      <div class="mark">Emma</div>
+      <div class="status"><span class="dot"></span> here</div>
+    </div>
+    <div class="thread" id="thread"></div>
+    <div class="composer">
+      <textarea id="input" placeholder="Say something." rows="1"></textarea>
+      <button class="send" id="sendBtn">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  const gate = document.getElementById('gate');
+  const app = document.getElementById('app');
+  const gateForm = document.getElementById('gateForm');
+  const pwInput = document.getElementById('pw');
+  const gateBtn = document.getElementById('gateBtn');
+  const gateError = document.getElementById('gateError');
+  const thread = document.getElementById('thread');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('sendBtn');
+
+  let PASSWORD = null;
+  let history = [];
+
+  gateForm.addEventListener('submit', async function(e){
+    e.preventDefault();
+    gateError.textContent = '';
+    gateBtn.disabled = true;
+    gateBtn.textContent = 'Checking…';
+    try{
+      const res = await fetch('/.netlify/functions/chat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ auth_check: true, password: pwInput.value })
+      });
+      const data = await res.json();
+      if(data.ok){
+        PASSWORD = pwInput.value;
+        sessionStorage.setItem('emma_pw', PASSWORD);
+        showApp();
+      } else {
+        gateError.textContent = 'That\u2019s not it.';
+      }
+    } catch(err){
+      gateError.textContent = 'Something went wrong. Try again.';
+    }
+    gateBtn.disabled = false;
+    gateBtn.textContent = 'Enter';
+  });
+
+  function timeBasedGreeting(){
+    const hour = new Date().getHours();
+    if (hour < 5)  return "You're up rather late. Or rather early, depending on how you look at it.";
+    if (hour < 12) return "Morning.";
+    if (hour < 17) return "Afternoon.";
+    if (hour < 22) return "Evening.";
+    return "You're up rather late. Or rather early, depending on how you look at it.";
+  }
+
+  function showApp(){
+    gate.style.display = 'none';
+    app.classList.add('active');
+    addMessage('emma', timeBasedGreeting() + " What's on?");
+    input.focus();
+  }
+
+  function addMessage(who, text){
+    const el = document.createElement('div');
+    el.className = 'msg from-' + who;
+    el.innerHTML = '<div class="who">' + (who === 'emma' ? 'Emma' : 'Ray') + '</div><div class="bubble"></div>';
+    el.querySelector('.bubble').textContent = text;
+    thread.appendChild(el);
+    thread.scrollTop = thread.scrollHeight;
+    return el;
+  }
+
+  function addThinking(){
+    const el = document.createElement('div');
+    el.className = 'msg from-emma';
+    el.id = 'thinkingMsg';
+    el.innerHTML = '<div class="who">Emma</div><div class="thinking">thinking<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>';
+    thread.appendChild(el);
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  function removeThinking(){
+    const el = document.getElementById('thinkingMsg');
+    if(el) el.remove();
+  }
+
+  async function send(){
+    const text = input.value.trim();
+    if(!text) return;
+    addMessage('ray', text);
+    history.push({ role: 'user', content: text });
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+    addThinking();
+
+    try{
+      const res = await fetch('/.netlify/functions/chat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ password: PASSWORD, history: history })
+      });
+      const data = await res.json();
+      removeThinking();
+      if(data.reply){
+        addMessage('emma', data.reply);
+        history.push({ role: 'assistant', content: data.reply });
+      } else {
+        addMessage('emma', "Something's gone sideways on my end. Try that again?");
+      }
+    } catch(err){
+      removeThinking();
+      addMessage('emma', "I've lost the connection somewhere. Try again in a moment.");
+    }
+    sendBtn.disabled = false;
+    input.focus();
+  }
+
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' && !e.shiftKey){
+      e.preventDefault();
+      send();
+    }
+  });
+  input.addEventListener('input', function(){
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  });
+
+  // Restore session
+  const saved = sessionStorage.getItem('emma_pw');
+  if(saved){
+    PASSWORD = saved;
+    showApp();
+  }
+})();
+</script>
+
+</body>
+</html>
