@@ -2,7 +2,7 @@
 //
 // Scheduled function (see netlify.toml) — runs hourly, checking calendar,
 // inbox, and task deadlines each time, and judges whether anything is
-// worth proactively telling Ray about, unprompted, over WhatsApp (email is
+// worth proactively telling Ray about, unprompted, over Telegram (email is
 // unconditional, see EMAIL POLICY below; calendar/tasks still go through
 // judgment). This is a deliberate exception to Emma's normal reactive-only
 // behaviour, per Ray's explicit decision — first made 7 July 2026 (stub/
@@ -17,6 +17,11 @@
 // verification, a subscription needing renewal every 7 days) for marginal
 // benefit over hourly for a personal inbox.
 //
+// CHANNEL MIGRATION (27 July 2026): sending switched from Twilio WhatsApp
+// to the Telegram Bot API when Emma moved off WhatsApp entirely. Judgment
+// logic, quiet hours, and email policy below are unchanged — only the send
+// mechanism changed.
+//
 // EMAIL POLICY (updated 14 July 2026): every new unread email now notifies
 // Ray unconditionally — no judgment call applied. Ray is actively pruning
 // this inbox down to essential senders (unsubscribing from newsletters
@@ -26,10 +31,9 @@
 // Emma's judgment call as before — this change is deliberately scoped to
 // email only.
 //
-// Env vars: same as chat.js/whatsapp-background.js — GOOGLE_CLIENT_ID/
+// Env vars: same as chat.js/emma-telegram-background.js — GOOGLE_CLIENT_ID/
 // SECRET/REFRESH_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
-// ANTHROPIC_API_KEY, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
-// TWILIO_WHATSAPP_NUMBER, EMMA_OWNER_WHATSAPP_NUMBER
+// ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, EMMA_OWNER_TELEGRAM_ID
 
 async function supabaseRequest(path, options = {}) {
   const res = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`, {
@@ -181,26 +185,40 @@ function isQuietHours() {
   return londonHour >= 23 || londonHour < 7;
 }
 
-async function sendWhatsAppMessage(toNumber, body) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+// Same 4096-char safety-net split used in emma-telegram-background.js —
+// duplicated here rather than shared, matching this codebase's existing
+// pattern of each Netlify function being self-contained.
+function splitForTelegram(text, limit = 4096) {
+  if (text.length <= limit) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > limit) {
+    let cut = remaining.lastIndexOf('\n\n', limit);
+    if (cut < limit * 0.5) cut = remaining.lastIndexOf('\n', limit);
+    if (cut < limit * 0.5) cut = remaining.lastIndexOf(' ', limit);
+    if (cut < 1) cut = limit;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
+}
 
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      From: `whatsapp:${fromNumber}`,
-      To: `whatsapp:${toNumber}`,
-      Body: body,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error('Twilio send failed: ' + JSON.stringify(data));
-  return data;
+async function sendTelegramMessage(chatId, body) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const parts = splitForTelegram(body);
+  let lastData;
+  for (const part of parts) {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: part }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error('Telegram send failed: ' + JSON.stringify(data));
+    lastData = data;
+  }
+  return lastData;
 }
 
 exports.handler = async function () {
@@ -264,7 +282,7 @@ exports.handler = async function () {
 
     let judgeDecisions = [];
     if (newEvents.length || newDeadlines.length) {
-      const judgePrompt = `You are Emma, Ray Watte's personal AI assistant — dry, understated, warm, never sycophantic. You are deciding whether anything below is worth proactively messaging Ray about right now, unprompted, over WhatsApp. This is a deliberate exception to your normal reactive-only rule, so hold a genuinely high bar: a meeting he obviously already knows about is NOT worth it. A meeting starting soon that he might not have front-of-mind, or a task deadline that's arriving without him having acted on it, IS worth it. A message sent for something trivial costs more than it earns — when in doubt, don't send. (Note: email is handled separately and is not your concern here — every new email notifies unconditionally regardless of your judgment.)
+      const judgePrompt = `You are Emma, Ray Watte's personal AI assistant — dry, understated, warm, never sycophantic. You are deciding whether anything below is worth proactively messaging Ray about right now, unprompted, over Telegram. This is a deliberate exception to your normal reactive-only rule, so hold a genuinely high bar: a meeting he obviously already knows about is NOT worth it. A meeting starting soon that he might not have front-of-mind, or a task deadline that's arriving without him having acted on it, IS worth it. A message sent for something trivial costs more than it earns — when in doubt, don't send. (Note: email is handled separately and is not your concern here — every new email notifies unconditionally regardless of your judgment.)
 
 Upcoming calendar events (next 6 hours):
 ${newEvents.length ? newEvents.map((e) => `- [id:${e.id}] "${e.summary}" at ${e.start}${e.location ? ' — ' + e.location : ''}`).join('\n') : '(none)'}
@@ -273,7 +291,7 @@ Task deadlines arriving within 6 hours:
 ${newDeadlines.length ? newDeadlines.map((t) => `- [id:${t.id}] "${t.task}" due ${t.due_date}`).join('\n') : '(none)'}
 
 Respond with ONLY a JSON object — no markdown code fences, no \`\`\`json, no explanatory text before or after — in this exact shape:
-{"send": [{"reference_id": "...", "trigger_type": "calendar"|"task", "message": "short WhatsApp-length message in your voice, as you'd actually text Ray"}], "skipped": [{"reference_id": "...", "reason": "brief reason you didn't flag this"}]}
+{"send": [{"reference_id": "...", "trigger_type": "calendar"|"task", "message": "short text-message-length message in your voice, as you'd actually text Ray"}], "skipped": [{"reference_id": "...", "reason": "brief reason you didn't flag this"}]}
 Every item above must appear in exactly one of "send" or "skipped" — nothing should be silently omitted. If nothing is worth sending, "send" should be an empty array.`;
 
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -311,7 +329,7 @@ Every item above must appear in exactly one of "send" or "skipped" — nothing s
     if (emailDecisions.length) console.log(`${emailDecisions.length} email(s) auto-queued for send (no judgment applied, per policy).`);
     if (newCheckinNudges.length) console.log(`${newCheckinNudges.length} check-in nudge(s) auto-queued for send (no judgment applied, standing instruction).`);
 
-    const ownerNumber = process.env.EMMA_OWNER_WHATSAPP_NUMBER;
+    const ownerChatId = process.env.EMMA_OWNER_TELEGRAM_ID;
     let sentCount = 0;
 
     for (const item of decisions) {
@@ -327,22 +345,23 @@ Every item above must appear in exactly one of "send" or "skipped" — nothing s
       });
       // Logging happens unconditionally above regardless of send success —
       // dedup and chat.js's fetchPendingProactiveNotes fallback both rely
-      // on the row existing even if the WhatsApp send itself fails.
+      // on the row existing even if the Telegram send itself fails.
       try {
-        if (ownerNumber) {
-          await sendWhatsAppMessage(ownerNumber, item.message);
+        if (ownerChatId) {
+          await sendTelegramMessage(ownerChatId, item.message);
           sentCount++;
         } else {
-          console.error('EMMA_OWNER_WHATSAPP_NUMBER not configured — logged only, not sent.');
+          console.error('EMMA_OWNER_TELEGRAM_ID not configured — logged only, not sent.');
         }
       } catch (err) {
-        console.error(`Failed to send WhatsApp for ${item.reference_id}:`, err.message);
+        console.error(`Failed to send Telegram message for ${item.reference_id}:`, err.message);
       }
     }
 
-    return { statusCode: 200, body: `Logged ${decisions.length} notification(s), sent ${sentCount} via WhatsApp.` };
+    return { statusCode: 200, body: `Logged ${decisions.length} notification(s), sent ${sentCount} via Telegram.` };
   } catch (err) {
     console.error('emma-notify error:', err.message);
     return { statusCode: 500, body: err.message };
   }
 };
+
