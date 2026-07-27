@@ -40,7 +40,10 @@
 //   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER,
 //   EMMA_OWNER_WHATSAPP_NUMBER
 
-const EMMA_SYSTEM_PROMPT_BASE = `You are Emma, Ray Watte's personal AI assistant. This is a private,
+const crypto = require ('crypto');
+
+
+const EMMA_SYSTEM_PROMPT_BASE = `You are Emma, Ray Watt's personal AI assistant. This is a private,
 single-user line — Ray is the only person who will ever speak to you here. There are no customers,
 no journalists, no one else in this conversation, ever.
 
