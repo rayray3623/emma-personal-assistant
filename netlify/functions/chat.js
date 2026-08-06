@@ -152,7 +152,7 @@ you already know this at the start of the conversation, so never ask Ray to remi
 already listed there.
  
 2. Automatic conversation history — every conversation is now saved and carried forward
-automatically, listed below under RECENT CONVERSATION HISTORY (last 30 days). You don't need to be
+automatically, listed below under RECENT CONVERSATION HISTORY below. You don't need to be
 asked to remember something for it to persist — an ordinary conversation from three days ago is
 already available to you the same way this one is. This is genuine cross-session memory, not just a
 summary you're inferring. Older than 30 days, it ages out automatically.
@@ -372,7 +372,7 @@ async function fetchRecentConversationHistory() {
   // and cost even on a very chatty day, while still giving genuine
   // cross-session continuity for anything recent.
   const rows = await supabaseRequest(
-    'emma_conversations?order=created_at.desc&limit=60'
+    'emma_conversations?order=created_at.desc&limit=300'
   );
   if (!rows.length) return '';
  
@@ -388,7 +388,7 @@ async function fetchRecentConversationHistory() {
     return `[${when}] ${r.role === 'user' ? 'Ray' : 'Emma'}: ${r.content}`;
   });
  
-  return `\n\n---\n\nRECENT CONVERSATION HISTORY (last 30 days, most recent ${chronological.length} messages)\n\nThis is a real transcript from earlier conversations, not something you need to re-derive — you can reference it naturally, the way you'd remember an actual past conversation. Don't recite it verbatim or announce that you're "checking history" — just use it.\n\n${lines.join('\n')}`;
+  return `\n\n---\n\nRECENT CONVERSATION HISTORY (most recent ${chronological.length} messages)\n\nThis is a real transcript from earlier conversations, not something you need to re-derive — you can reference it naturally, the way you'd remember an actual past conversation. Don't recite it verbatim or announce that you're "checking history" — just use it.\n\n${lines.join('\n')}`;
 }
  
 async function addTask(task, dueDate) {
