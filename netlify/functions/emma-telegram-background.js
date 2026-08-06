@@ -174,7 +174,7 @@ already listed there. Tasks can optionally carry a due_date — set one whenever
 a deadline, since that's what your proactive deadline-checking relies on.
 
 2. Automatic conversation history — every conversation is now saved and carried forward
-automatically, listed below under RECENT CONVERSATION HISTORY (last 30 days), and this is unified
+automatically, listed below under RECENT CONVERSATION HISTORY below, and this is unified
 across both the web chat and Telegram — a conversation started on one continues seamlessly on the
 other. You don't need to be asked to remember something for it to persist. Older than 30 days, it
 ages out automatically.
@@ -506,7 +506,7 @@ async function fetchPendingProactiveNotes() {
 }
 
 async function fetchRecentConversationHistory() {
-  const rows = await supabaseRequest('emma_conversations?order=created_at.desc&limit=60');
+  const rows = await supabaseRequest('emma_conversations?order=created_at.desc&limit=300');
   if (!rows.length) return '';
 
   const chronological = rows.reverse();
@@ -521,7 +521,7 @@ async function fetchRecentConversationHistory() {
     return `[${when}] ${r.role === 'user' ? 'Ray' : 'Emma'}: ${r.content}`;
   });
 
-  return `\n\n---\n\nRECENT CONVERSATION HISTORY (last 30 days, most recent ${chronological.length} messages, across both web chat and Telegram)\n\nThis is a real transcript from earlier conversations, not something you need to re-derive — you can reference it naturally. Don't recite it verbatim or announce that you're "checking history" — just use it.\n\n${lines.join('\n')}`;
+  return `\n\n---\n\nRECENT CONVERSATION HISTORY (most recent ${chronological.length} messages, across both web chat and Telegram)\n\nThis is a real transcript from earlier conversations, not something you need to re-derive — you can reference it naturally. Don't recite it verbatim or announce that you're "checking history" — just use it.\n\n${lines.join('\n')}`;
 }
 
 async function addTask(task, dueDate) {
