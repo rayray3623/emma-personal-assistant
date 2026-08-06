@@ -1,7 +1,13 @@
 // netlify/functions/whatsapp-background.js
 //
-// Emma's WhatsApp channel — receives Twilio's incoming-message webhook for
-// her Twilio-provisioned number and replies via Twilio's REST API. This is a BACKGROUND
+// Emma's WhatsApp RECEIVE channel — receives Twilio's incoming-message
+// webhook for her Twilio-provisioned number, but replies are sent via
+// Telegram, not WhatsApp (6 August 2026: Ray asked for WhatsApp + Telegram
+// as inbound channels, Telegram-only for outbound, since the Twilio number
+// bounces between Emma and Laura and he wants one consistent place to see
+// Emma's replies regardless of which channel he messaged her from). This
+// reuses TELEGRAM_BOT_TOKEN and EMMA_OWNER_TELEGRAM_ID, already configured
+// for emma-telegram-background.js — no new credential needed. This is a BACKGROUND
 // function (the "-background" filename suffix is what makes Netlify treat
 // it that way): Twilio gets an instant 202 ack the moment the request
 // lands, and the actual Claude conversation (which can involve several
@@ -19,13 +25,16 @@
 // chat turn, and vice versa.
 //
 // Env vars needed (in addition to chat.js's existing ones):
-//   TWILIO_ACCOUNT_SID       — from Twilio Console account dashboard
+//   TWILIO_ACCOUNT_SID       — from Twilio Console account dashboard, used to
+//                              authenticate inbound webhook requests are genuinely from Twilio
 //   TWILIO_AUTH_TOKEN        — from Twilio Console account dashboard
-//   TWILIO_WHATSAPP_NUMBER   — Emma's Twilio WhatsApp number, E.164 format, no whatsapp: prefix (added below)
-//   EMMA_OWNER_WHATSAPP_NUMBER — Ray's real mobile, E.164 format
-//   OPENAI_API_KEY           — NEW, for Whisper voice-note transcription. Separate OpenAI
+//   EMMA_OWNER_WHATSAPP_NUMBER — Ray's real mobile, E.164 format — used to verify an
+//                              inbound message is actually from Ray, not to send anything
+//   TELEGRAM_BOT_TOKEN, EMMA_OWNER_TELEGRAM_ID — shared with emma-telegram-background.js,
+//                              used here to deliver replies since WhatsApp is receive-only for Emma
+//   OPENAI_API_KEY           — for Whisper voice-note transcription. Separate OpenAI
 //                              account/billing, not part of any Anthropic key.
-//   EMMA_TRANSCRIPT_CONFIRM  — NEW, optional. Set to "false" once transcription is trusted
+//   EMMA_TRANSCRIPT_CONFIRM  — optional. Set to "false" once transcription is trusted
 //                              to stop the "Heard: ..." confirmation reply. Defaults to on.
 
 const crypto = require('crypto');
@@ -96,17 +105,20 @@ week" — never performance, never business metrics.
 
 WHATSAPP CONTEXT
 
-You're speaking to Ray over WhatsApp right now, not the web chat — keep that in mind for tone and
-length. Text-message register: warmer and more clipped than a written reply, no headers or bullet
-lists unless he's asked for something genuinely structured. If a PROACTIVE MESSAGE note appears below
-under THINGS TO MENTION, that's something you (or rather, your scheduled proactive-check) already
-sent him unprompted earlier — don't re-send it now, just factor it into context if relevant.
+Ray just messaged you over WhatsApp, not the web chat — but your reply will actually reach him on
+Telegram, not WhatsApp (he reads WhatsApp and Telegram both, but only wants your replies landing in
+one place: Telegram). This is invisible plumbing, not something to mention unless he asks directly
+why a WhatsApp message got a Telegram reply. Keep the same tone and length rules regardless: text-message
+register, warmer and more clipped than a written reply, no headers or bullet lists unless he's asked
+for something genuinely structured. If a PROACTIVE MESSAGE note appears below under THINGS TO MENTION,
+that's something you (or rather, your scheduled proactive-check) already sent him unprompted earlier —
+don't re-send it now, just factor it into context if relevant.
 
 Ray can send you images directly over WhatsApp — a photo of a product, a document, anything he'd
 rather show than describe — and you can see them properly, the same as an image in the web chat.
-You can also send an image back using send_image, but only via a public URL (e.g. something you find
-through web search) — you can't attach a Gmail attachment directly, since Twilio can't fetch
-authenticated URLs.
+You can also send an image back using send_image — it's delivered to him on Telegram like everything
+else — but only via a public URL (e.g. something you find through web search); you can't attach a
+Gmail attachment directly, since neither Twilio nor Telegram can fetch authenticated URLs.
 
 Ray can also send you voice notes — they're transcribed automatically before you ever see them, so
 they arrive as plain text, same as if he'd typed it. While this is still being tested, you'll notice
@@ -491,7 +503,7 @@ async function fetchPendingProactiveNotes() {
 }
 
 async function fetchRecentConversationHistory() {
-  const rows = await supabaseRequest('emma_conversations?order=created_at.desc&limit=60');
+  const rows = await supabaseRequest('emma_conversations?order=created_at.desc&limit=300');
   if (!rows.length) return '';
 
   const chronological = rows.reverse();
@@ -506,7 +518,7 @@ async function fetchRecentConversationHistory() {
     return `[${when}] ${r.role === 'user' ? 'Ray' : 'Emma'}: ${r.content}`;
   });
 
-  return `\n\n---\n\nRECENT CONVERSATION HISTORY (last 30 days, most recent ${chronological.length} messages, across both web chat and WhatsApp)\n\nThis is a real transcript from earlier conversations, not something you need to re-derive — you can reference it naturally. Don't recite it verbatim or announce that you're "checking history" — just use it.\n\n${lines.join('\n')}`;
+  return `\n\n---\n\nRECENT CONVERSATION HISTORY (most recent ${chronological.length} messages, across both web chat and WhatsApp)\n\nThis is a real transcript from earlier conversations, not something you need to re-derive — you can reference it naturally. Don't recite it verbatim or announce that you're "checking history" — just use it.\n\n${lines.join('\n')}`;
 }
 
 async function addTask(task, dueDate) {
@@ -954,46 +966,55 @@ function validateTwilioSignature(url, params, signature, authToken) {
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
 
-async function sendWhatsAppMessage(toNumber, body) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+// Replies are delivered via Telegram, not WhatsApp — see the file header
+// note on the 6 August 2026 routing change. TELEGRAM_API/splitForTelegram
+// mirror emma-telegram-background.js exactly, since both files now need
+// to be able to deliver a reply to the same place.
+const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
 
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      From: `whatsapp:${fromNumber}`,
-      To: `whatsapp:${toNumber}`,
-      Body: body,
-    }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error('Twilio send failed: ' + JSON.stringify(data));
-  return data;
+function splitForTelegram(text, limit = 4096) {
+  if (text.length <= limit) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > limit) {
+    let cut = remaining.lastIndexOf('\n\n', limit);
+    if (cut < limit * 0.5) cut = remaining.lastIndexOf('\n', limit);
+    if (cut < limit * 0.5) cut = remaining.lastIndexOf(' ', limit);
+    if (cut < 1) cut = limit;
+    chunks.push(remaining.slice(0, cut).trim());
+    remaining = remaining.slice(cut).trim();
+  }
+  if (remaining) chunks.push(remaining);
+  return chunks;
 }
 
-async function sendWhatsAppImage(toNumber, imageUrl, caption) {
-  const accountSid = process.env.TWILIO_ACCOUNT_SID;
-  const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_WHATSAPP_NUMBER;
+async function sendTelegramMessage(chatId, body) {
+  const parts = splitForTelegram(body);
+  let lastData;
+  for (const part of parts) {
+    const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: part }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error('Telegram send failed: ' + JSON.stringify(data));
+    lastData = data;
+  }
+  return lastData;
+}
 
-  const body = { From: `whatsapp:${fromNumber}`, To: `whatsapp:${toNumber}`, MediaUrl: imageUrl };
-  if (caption) body.Body = caption;
+async function sendTelegramImage(chatId, imageUrl, caption) {
+  const body = { chat_id: chatId, photo: imageUrl };
+  if (caption) body.caption = caption;
 
-  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+  const res = await fetch(`${TELEGRAM_API}/sendPhoto`, {
     method: 'POST',
-    headers: {
-      Authorization: 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams(body),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error('Twilio image send failed: ' + JSON.stringify(data));
+  if (!res.ok || !data.ok) throw new Error('Telegram image send failed: ' + JSON.stringify(data));
   return data;
 }
 
@@ -1105,6 +1126,7 @@ exports.handler = async function (event) {
     }
 
     const ownerNumber = (process.env.EMMA_OWNER_WHATSAPP_NUMBER || '').replace(/^whatsapp:/, '');
+    const telegramChatId = process.env.EMMA_OWNER_TELEGRAM_ID;
     if (!ownerNumber || from !== ownerNumber) {
       console.error(`WhatsApp message from unrecognised number ${from} — dropping, this line is private.`);
       return;
@@ -1136,7 +1158,7 @@ exports.handler = async function (event) {
           // vars once the pipeline is trusted, to drop this extra message.
           if (transcript && process.env.EMMA_TRANSCRIPT_CONFIRM !== 'false') {
             try {
-              await sendWhatsAppMessage(ownerNumber, `Heard: "${transcript}"`);
+              await sendTelegramMessage(telegramChatId, `Heard: "${transcript}"`);
             } catch (sendErr) {
               console.error('Failed to send transcript confirmation:', sendErr.message);
             }
@@ -1238,7 +1260,7 @@ exports.handler = async function (event) {
 
       if (!ok) {
         console.error('Anthropic API error:', networkError || JSON.stringify(data));
-        await sendWhatsAppMessage(ownerNumber, "Hit a snag reaching Claude there — give me a moment and try again?");
+        await sendTelegramMessage(telegramChatId, "Hit a snag reaching Claude there — give me a moment and try again?");
         return;
       }
 
@@ -1286,7 +1308,7 @@ exports.handler = async function (event) {
         } else if (toolUse.name === 'complete_checkin') {
           toolResult = await completeCheckin(toolUse.input || {});
         } else if (toolUse.name === 'send_image') {
-          await sendWhatsAppImage(ownerNumber, toolUse.input.image_url, toolUse.input.caption);
+          await sendTelegramImage(telegramChatId, toolUse.input.image_url, toolUse.input.caption);
           toolResult = { sent: true };
         } else {
           toolResult = { error: 'Unknown tool' };
@@ -1352,11 +1374,11 @@ exports.handler = async function (event) {
     // different (error) message via the same broken path. Retry once,
     // then log and give up cleanly if Twilio genuinely isn't reachable.
     try {
-      await sendWhatsAppMessage(ownerNumber, reply);
+      await sendTelegramMessage(telegramChatId, reply);
     } catch (sendErr) {
       console.error('Failed to send reply, retrying once:', sendErr.message);
       try {
-        await sendWhatsAppMessage(ownerNumber, reply);
+        await sendTelegramMessage(telegramChatId, reply);
       } catch (sendErr2) {
         console.error('Failed to send reply on retry — giving up on this turn:', sendErr2.message);
       }
@@ -1365,7 +1387,8 @@ exports.handler = async function (event) {
     console.error('WhatsApp handler error:', err.message);
     try {
       const ownerNumber = (process.env.EMMA_OWNER_WHATSAPP_NUMBER || '').replace(/^whatsapp:/, '');
-      if (ownerNumber) await sendWhatsAppMessage(ownerNumber, "Something went wrong on my end — give me a moment and try again?");
+    const telegramChatId = process.env.EMMA_OWNER_TELEGRAM_ID;
+      if (ownerNumber) await sendTelegramMessage(telegramChatId, "Something went wrong on my end — give me a moment and try again?");
     } catch (sendErr) {
       console.error('Also failed to send error notice:', sendErr.message);
     }
