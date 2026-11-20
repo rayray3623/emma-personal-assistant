@@ -13,3 +13,8 @@
 # regardless of how often this fires, so overnight runs no-op harmlessly.
 [functions."emma-notify"]
   schedule = "0 * * * *"
+  
+# Daily Supabase keep-alive so Emma's project is never paused for inactivity.
+[functions."emma-keepalive"]
+  schedule = "17 6 * * *"
+  
