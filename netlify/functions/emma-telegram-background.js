@@ -1287,7 +1287,14 @@ exports.handler = async function (event) {
           max_tokens: 1024,
           system: systemPrompt,
           messages,
-          tools: [...TOOLS, { type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
+          // Prompt caching (2026-11-20): breakpoint on the last custom tool caches the
+          // whole TOOLS list (~3k tokens). The system prompt carries the current time,
+          // so it changes every call and is deliberately left uncached.
+          tools: [
+            ...TOOLS.slice(0, -1),
+            { ...TOOLS[TOOLS.length - 1], cache_control: { type: 'ephemeral' } },
+            { type: 'web_search_20250305', name: 'web_search', max_uses: 5 },
+          ],
         }),
       });
 
