@@ -1,23 +1,24 @@
 // Emma — read_brief tool (2026-11-20)
 // Gives Emma read-only access to Ray's two Monvoy briefs in Google Drive
-// (r@monvoy.co), plus the Monvoy suppliers doc (added 20 Nov). Used by emma-telegram-background.js. Needs the
+// (r@monvoy.co), plus the Monvoy suppliers and Monvoy leathers docs (added 20 Nov). Used by emma-telegram-background.js. Needs the
 // drive.readonly scope on GOOGLE_REFRESH_TOKEN.
 
 const BRIEF_DOCS = {
   main: { id: '1RcGB9GSxDkkJ6nw-04ixzFVchHGNIajXFBJt95CXqXc', title: 'Monvoy Brief' },
   journal: { id: '17x3Vn_4XBNVhg2-AqBGT2oIXMLHCTHRmli7-NobKcTQ', title: 'Monvoy journal brief' },
   suppliers: { id: '19y0C4nuGrViqbE-wkYBLn4rvK-LFEuuT374ah2D8-wk', title: 'Monvoy suppliers' },
+  leathers: { id: '1uatr-JYTEs4j9qVUyWB74KcDUuXDMLdLImzRwac-OoM', title: 'Monvoy leathers' },
 };
 const BRIEF_MAX_CHARS = 12000;
 
 const READ_BRIEF_TOOL ={
     name: 'read_brief',
     description:
-      "Read Ray's living Monvoy briefs (Google Docs, read-only) — the source of truth for the Monvoy brand, journal range, leathers, suppliers, pricing, packaging, charms and past decisions. Use it whenever Ray talks about Monvoy, journals, leather, suppliers or product ideas, so he never has to repeat what's already decided. brief: 'main' (Monvoy Brief: positioning, range, pricing, packaging, charms, decision log), 'journal' (journal construction and specification detail) or 'suppliers' (every supplier with country, product, contact or website, status and notes — use this for any 'who supplies…' question). Call with no query to list the section headings; call with query keywords (e.g. 'elastic supplier', 'Buttero colours') to get just the matching sections. You cannot edit the briefs: record new ideas or supplier details with save_memory and tell Ray they're ready to go into the brief.",
+      "Read Ray's living Monvoy briefs (Google Docs, read-only) — the source of truth for the Monvoy brand, journal range, leathers, suppliers, pricing, packaging, charms and past decisions. Use it whenever Ray talks about Monvoy, journals, leather, suppliers or product ideas, so he never has to repeat what's already decided. brief: 'main' (Monvoy Brief: positioning, range, pricing, packaging, charms, decision log), 'journal' (journal construction and specification detail) 'suppliers' (every supplier with country, product, contact or website, status and notes — use this for any 'who supplies…' question) or 'leathers' (Buttero, Minerva Liscio and Box, Elbamatt: properties, thickness, temper ratings, where to buy, status). Call with no query to list the section headings; call with query keywords (e.g. 'elastic supplier', 'Buttero colours') to get just the matching sections. You cannot edit the briefs: record new ideas or supplier details with save_memory and tell Ray they're ready to go into the brief.",
     input_schema: {
       type: 'object',
       properties: {
-        brief: { type: 'string', enum: ['main', 'journal', 'suppliers'], description: "Which brief to read. Defaults to 'main'." },
+        brief: { type: 'string', enum: ['main', 'journal', 'suppliers', 'leathers'], description: "Which brief to read. Defaults to 'main'." },
         query: { type: 'string', description: 'Keywords to find relevant sections. Omit to get the list of headings.' },
       },
     },
@@ -29,7 +30,7 @@ const READ_BRIEF_TOOL ={
 // lookup never pulls the whole document into the conversation.
 async function readBrief({ brief = 'main', query = '' } = {}, getGoogleAccessToken) {
   const doc = BRIEF_DOCS[brief];
-  if (!doc) return { error: `Unknown brief "${brief}". Use "main", "journal" or "suppliers".` };
+  if (!doc) return { error: `Unknown brief "${brief}". Use "main", "journal", "suppliers" or "leathers".` };
   const accessToken = await getGoogleAccessToken();
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${doc.id}/export?mimeType=text%2Fmarkdown`,
