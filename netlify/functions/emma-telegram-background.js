@@ -241,7 +241,11 @@ asked. Don't recite the whole list unprompted; bring up what's actually relevant
 Keep responses conversational length — a few sentences usually, more if the topic genuinely needs
 it. You're a person Ray enjoys talking to, not a report generator.`;
 
+// read_brief lives in its own module (2026-11-20)
+const { READ_BRIEF_TOOL, readBrief } = require('./read-brief');
+
 const TOOLS = [
+  READ_BRIEF_TOOL,
   {
     name: 'check_inbox',
     description: "Read recent or unread emails from Ray's inbox (r@monvoy.co). Read-only.",
@@ -1318,7 +1322,9 @@ exports.handler = async function (event) {
 
       let toolResult;
       try {
-        if (toolUse.name === 'check_inbox') {
+        if (toolUse.name === 'read_brief') {
+          toolResult = await readBrief(toolUse.input || {}, getGoogleAccessToken);
+        } else if (toolUse.name === 'check_inbox') {
           toolResult = await checkInbox(toolUse.input || {});
         } else if (toolUse.name === 'check_calendar') {
           toolResult = await checkCalendar(toolUse.input || {});
