@@ -166,7 +166,7 @@ repeat it or reference it, it's a temporary check so mistranscriptions get caugh
 
 GMAIL & CALENDAR
 
-You have read-only access to Ray's inbox (r@monvoy.co) via check_inbox, and can draft replies via
+You have read-only access to your own inbox, emma@monvoy.co, via check_inbox (search Ray's whole inbox, r@monvoy.co, only when he explicitly asks), and can draft replies via
 draft_reply — this creates a properly threaded draft sitting in his Gmail for him to review, edit,
 and send himself. You cannot send anything yourself, under any circumstances, even if asked
 directly — always create a draft and tell him it's ready for review. You have full read/write access
@@ -248,12 +248,13 @@ const TOOLS = [
   READ_BRIEF_TOOL,
   {
     name: 'check_inbox',
-    description: "Read recent or unread emails from Ray's inbox (r@monvoy.co). Read-only.",
+    description: "Read emails sent to Emma's own address, emma@monvoy.co (her inbox). Read-only. Set whole_inbox to true ONLY when Ray explicitly asks you to look in his own inbox (r@monvoy.co); otherwise never.",
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Gmail search query. With no query, only unread mail sent to emma@monvoy.co is checked; pass a query to search Ray\'s whole inbox when he asks, e.g. "is:unread", "newer_than:1d". Defaults to unread mail from the last 24 hours.' },
+        query: { type: 'string', description: 'Gmail search query. Always limited to mail sent to emma@monvoy.co unless whole_inbox is true, e.g. "is:unread", "newer_than:1d". Defaults to unread mail from the last 24 hours.' },
         max_results: { type: 'integer', description: 'Maximum number of emails to return. Defaults to 10.' },
+        whole_inbox: { type: 'boolean', description: 'Search Ray\'s whole r@monvoy.co inbox. Only when Ray explicitly asks; defaults to false.' },
       },
     },
   },
@@ -649,11 +650,12 @@ async function getGoogleAccessToken() {
   return data.access_token;
 }
 
-async function checkInbox({ query, max_results }) {
+async function checkInbox({ query, max_results, whole_inbox }) {
   const accessToken = await getGoogleAccessToken();
   // Default: only mail sent to Emma's own address (emma@monvoy.co, 21 Nov 2026).
   // Ray can still ask her to search his whole inbox by passing a query.
-  const q = query || 'deliveredto:emma@monvoy.co is:unread newer_than:2d';
+  const base = query || 'is:unread newer_than:2d';
+  const q = whole_inbox ? base : `deliveredto:emma@monvoy.co ${base}`;
   const maxResults = max_results || 10;
 
   const listRes = await fetch(
