@@ -91,7 +91,7 @@ async function fetchUpcomingEvents(accessToken) {
 async function fetchRecentUnreadEmails(accessToken) {
   // Same 6-hour window as calendar, for the same overlap reasoning.
   const listRes = await fetch(
-    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent('is:unread newer_than:1d')}&maxResults=15`,
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent('deliveredto:emma@monvoy.co is:unread newer_than:1d')}&maxResults=15`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   const listData = await listRes.json();

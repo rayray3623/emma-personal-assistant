@@ -252,7 +252,7 @@ const TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Gmail search query, e.g. "is:unread", "newer_than:1d". Defaults to unread mail from the last 24 hours.' },
+        query: { type: 'string', description: 'Gmail search query. With no query, only unread mail sent to emma@monvoy.co is checked; pass a query to search Ray\'s whole inbox when he asks, e.g. "is:unread", "newer_than:1d". Defaults to unread mail from the last 24 hours.' },
         max_results: { type: 'integer', description: 'Maximum number of emails to return. Defaults to 10.' },
       },
     },
@@ -651,7 +651,9 @@ async function getGoogleAccessToken() {
 
 async function checkInbox({ query, max_results }) {
   const accessToken = await getGoogleAccessToken();
-  const q = query || 'is:unread newer_than:2d';
+  // Default: only mail sent to Emma's own address (emma@monvoy.co, 21 Nov 2026).
+  // Ray can still ask her to search his whole inbox by passing a query.
+  const q = query || 'deliveredto:emma@monvoy.co is:unread newer_than:2d';
   const maxResults = max_results || 10;
 
   const listRes = await fetch(
