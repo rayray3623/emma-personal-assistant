@@ -243,9 +243,11 @@ it. You're a person Ray enjoys talking to, not a report generator.`;
 
 // read_brief lives in its own module (2026-11-20)
 const { READ_BRIEF_TOOL, readBrief } = require('./read-brief');
+const { SEND_DRAFT_TOOL, sendDraft } = require('./send-draft');
 
 const TOOLS = [
   READ_BRIEF_TOOL,
+  SEND_DRAFT_TOOL,
   {
     name: 'check_inbox',
     description: "Read emails sent to Emma's own address, emma@monvoy.co (her inbox). Read-only. Set whole_inbox to true ONLY when Ray explicitly asks you to look in his own inbox (r@monvoy.co); otherwise never.",
@@ -964,6 +966,7 @@ async function draftReply({ message_id, body }) {
   const references = [originalReferences, originalMessageId].filter(Boolean).join(' ');
 
   const rawLines = [
+    'From: Emma <emma@monvoy.co>',
     `To: ${originalFrom}`,
     `Subject: ${subject}`,
     originalMessageId ? `In-Reply-To: ${originalMessageId}` : null,
@@ -987,7 +990,7 @@ async function draftReply({ message_id, body }) {
   const draftData = await draftRes.json();
   if (!draftRes.ok) throw new Error('Draft creation failed: ' + JSON.stringify(draftData));
 
-  return { drafted: true, to: originalFrom, subject, draftId: draftData.id };
+  return { drafted: true, from: 'Emma <emma@monvoy.co>', to: originalFrom, subject, draftId: draftData.id };
 }
 
 // --- Telegram-specific pieces ---
@@ -1346,6 +1349,8 @@ exports.handler = async function (event) {
           toolResult = await deleteCalendarEvents(toolUse.input || {});
         } else if (toolUse.name === 'draft_reply') {
           toolResult = await draftReply(toolUse.input || {});
+        } else if (toolUse.name === 'send_draft') {
+          toolResult = await sendDraft(toolUse.input || {}, getGoogleAccessToken);
         } else if (toolUse.name === 'add_task') {
           toolResult = await addTask(toolUse.input.task, toolUse.input.due_date);
         } else if (toolUse.name === 'update_task') {
